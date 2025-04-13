@@ -33,11 +33,11 @@ std::string handle_user_request(const std::string &method,
       auto content_type_it = headers.find("content-type");
       if (content_type_it == headers.end() || content_type_it->second.find("application/json") == std::string::npos)
       {
-        return response_http(415, "Content-Type must be application/json");
+        return response_http(415, json{{"message", "Content-Type must be application/json"}});
       }
       if (body.empty())
       {
-        return response_http(400, "Request body is empty");
+        return response_http(400, json{{"message", "Request body is empty"}});
       }
 
       try
@@ -46,7 +46,7 @@ std::string handle_user_request(const std::string &method,
         if (!request_json.contains("username") || !request_json["username"].is_string() ||
             !request_json.contains("password") || !request_json["password"].is_string())
         {
-          return response_http(400, "Missing or invalid 'username' or 'password' in JSON body");
+          return response_http(400, json{{"message", "Missing or invalid 'username' or 'password' in JSON body"}});
         }
 
         std::string username = request_json["username"];
@@ -54,7 +54,7 @@ std::string handle_user_request(const std::string &method,
 
         if (username.empty() || password.empty())
         {
-          return response_http(400, "'username' and 'password' cannot be empty");
+          return response_http(400, json{{"message", "'username' and 'password' cannot be empty"}});
         }
 
         // Call model function to create user
@@ -81,17 +81,17 @@ std::string handle_user_request(const std::string &method,
       catch (json::parse_error &e)
       {
         std::cerr << "JSON parse error: " << e.what() << std::endl;
-        return response_http(400, "Invalid JSON format");
+        return response_http(400, json{{"message", "Invalid JSON format"}});
       }
       catch (json::type_error &e)
       {
         std::cerr << "JSON type error: " << e.what() << std::endl;
-        return response_http(400, "Invalid JSON structure or types");
+        return response_http(400, json{{"message", "Invalid JSON structure or types"}});
       }
       catch (const std::exception &e)
       {
         std::cerr << "Error processing POST /users: " << e.what() << std::endl;
-        return response_http(500, "Internal server error processing request");
+        return response_http(500, json{{"message", "Internal server error processing request"}});
       }
     }
   }
@@ -105,7 +105,7 @@ std::string handle_user_request(const std::string &method,
         std::string id_str = path.substr(7); // Get ID part
         if (id_str.empty())
         {
-          return response_http(400, "User ID missing in path");
+          return response_http(400, json{{"message", "User ID missing in path"}});
         }
         int id = std::stoi(id_str);
 
@@ -132,20 +132,20 @@ std::string handle_user_request(const std::string &method,
       }
       catch (const std::invalid_argument &ia)
       {
-        return response_http(400, "Invalid user ID format");
+        return response_http(400, json{{"message", "Invalid user ID format"}});
       }
       catch (const std::out_of_range &oor)
       {
-        return response_http(400, "User ID out of range");
+        return response_http(400, json{{"message", "User ID out of range"}});
       }
       catch (const std::exception &e)
       {
         std::cerr << "Error processing DELETE /users/:id : " << e.what() << std::endl;
-        return response_http(500, "Internal server error processing request");
+        return response_http(500, json{{"message", "Internal server error processing request"}});
       }
     }
   }
 
   // If none of the user routes matched
-  return response_http(404, "User API endpoint not found");
+  return response_http(404, json{{"message", "Resource not found"}});
 }

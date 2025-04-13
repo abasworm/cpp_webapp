@@ -23,7 +23,7 @@ COPY main.cpp .
 # Link against SQLite3, SSL, Crypto, and Pthread libraries
 # Use -static for potentially smaller image, but might have issues on Alpine
 # Consider removing -static if runtime issues occur on Alpine
-RUN g++ main.cpp -o app -std=c++17 -Wall -Wextra -lsqlite3 -lssl -lcrypto -lpthread -static
+RUN g++ main.cpp -o webserver -std=c++17 -Wall -Wextra -lsqlite3 -lssl -lcrypto -lpthread -static
 
 # # ---- Final Stage ----
 # # Use a minimal Alpine base image for the final container
