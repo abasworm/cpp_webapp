@@ -28,7 +28,7 @@ g++ -c app/model/user_model.cpp -o user_model.o -std=c++17 -I. -Iconfig -Iapp/mo
 # -static flag links libraries statically
 echo "Linking object files into executable 'app'..."
 g++ main.o database.o utils.o user_controller.o user_model.o \
-    -o app \
+    -o webserver \
     -lsqlite3 -lssl -lcrypto -lpthread -static
 
 echo "Compilation and linking complete."
