@@ -1,0 +1,168 @@
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <thread>
+#include <sstream>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <sqlite3.h>
+#include <openssl/sha.h>
+
+#define PORT 8080
+
+sqlite3 *db;
+
+std::string sha256(const std::string &str)
+{
+  unsigned char hash[SHA256_DIGEST_LENGTH];
+  SHA256(reinterpret_cast<const unsigned char *>(str.c_str()), str.size(), hash);
+  std::ostringstream oss;
+  for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
+  {
+    oss << std::hex << (int)hash[i];
+  }
+  return oss.str();
+}
+
+void init_db()
+{
+  const char *sql = "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT);";
+  char *err;
+  if (sqlite3_exec(db, sql, nullptr, nullptr, &err) != SQLITE_OK)
+  {
+    std::cerr << "Database error: " << err << std::endl;
+    sqlite3_free(err);
+  }
+}
+
+std::string create_user(const std::string &username, const std::string &password)
+{
+  std::string hash = sha256(password);
+  sqlite3_stmt *stmt;
+  std::string sql = "INSERT INTO users (username, password) VALUES (?, ?);";
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK)
+    return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+
+  sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, hash.c_str(), -1, SQLITE_STATIC);
+
+  if (sqlite3_step(stmt) != SQLITE_DONE)
+  {
+    sqlite3_finalize(stmt);
+    return "HTTP/1.1 400 Bad Request\r\n\r\nUsername exists";
+  }
+  sqlite3_finalize(stmt);
+  return "HTTP/1.1 201 Created\r\n\r\nUser created";
+}
+
+std::string get_users()
+{
+  sqlite3_stmt *stmt;
+  std::string sql = "SELECT id, username FROM users;";
+  std::ostringstream oss;
+  oss << "[";
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK)
+  {
+    bool first = true;
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+    {
+      if (!first)
+        oss << ", ";
+      first = false;
+      oss << "{\"id\": " << sqlite3_column_int(stmt, 0)
+          << ", \"username\": \"" << sqlite3_column_text(stmt, 1) << "\"}";
+    }
+    sqlite3_finalize(stmt);
+  }
+  oss << "]";
+  return "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n" + oss.str();
+}
+
+std::string delete_user(int id)
+{
+  sqlite3_stmt *stmt;
+  std::string sql = "DELETE FROM users WHERE id = ?;";
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK)
+    return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+
+  sqlite3_bind_int(stmt, 1, id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return "HTTP/1.1 200 OK\r\n\r\nUser deleted";
+}
+
+std::string handle_request(const std::string &method, const std::string &path, const std::string &body)
+{
+  if (method == "GET" && path == "/users")
+  {
+    return get_users();
+  }
+  else if (method == "POST" && path == "/users")
+  {
+    std::string username, password;
+    std::istringstream iss(body);
+    iss >> username >> password;
+    return create_user(username, password);
+  }
+  else if (method == "DELETE" && path.find("/users/") == 0)
+  {
+    int id = std::stoi(path.substr(7));
+    return delete_user(id);
+  }
+  return "HTTP/1.1 404 Not Found\r\n\r\n";
+}
+
+void handle_client(int client_socket)
+{
+  char buffer[3000] = {0};
+  read(client_socket, buffer, 3000);
+
+  std::istringstream request(buffer);
+  std::string method, path, version;
+  request >> method >> path >> version;
+
+  std::string body;
+  std::getline(request, body, '\0');
+  if (!body.empty() && body[0] == '\r')
+    body.erase(0, 2);
+
+  std::string response = handle_request(method, path, body);
+  send(client_socket, response.c_str(), response.length(), 0);
+  close(client_socket);
+}
+
+int main()
+{
+  if (sqlite3_open("users.db", &db))
+  {
+    std::cerr << "Can't open DB: " << sqlite3_errmsg(db) << std::endl;
+    return 1;
+  }
+  init_db();
+
+  int server_fd, new_socket;
+  struct sockaddr_in address;
+  int opt = 1;
+  int addrlen = sizeof(address);
+
+  server_fd = socket(AF_INET, SOCK_STREAM, 0);
+  setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = INADDR_ANY;
+  address.sin_port = htons(PORT);
+
+  bind(server_fd, (struct sockaddr *)&address, sizeof(address));
+  listen(server_fd, 3);
+
+  std::cout << "Server listening on port " << PORT << std::endl;
+
+  while (true)
+  {
+    new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+    std::thread(handle_client, new_socket).detach();
+  }
+
+  sqlite3_close(db);
+  return 0;
+}

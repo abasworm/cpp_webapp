@@ -1,0 +1,29 @@
+# docker-compose.yml
+
+# Specify the Docker Compose version
+version: '3.8'
+
+# Define the services (containers)
+services:
+  # Define a service named 'cpp_web_server'
+  cpp_web_server:
+    # Specify the build context (current directory) and Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Assign a name to the container for easier identification
+    container_name: my_cpp_web_server
+    # Map port 8080 on the host to port 8080 in the container
+    ports:
+      - "8080:8080"
+    # Define a volume to persist the database file
+    # Mounts the 'db_data' directory from the host into '/root/' inside the container
+    # The 'users.db' file created by the app will be stored here.
+    volumes:
+      - ./db_data:/root/
+    # Optional: Restart policy
+    # restart: unless-stopped
+
+# Define the named volume (alternative to bind mount, managed by Docker)
+# volumes:
+#   db_data: # You would change the service volume to 'db_data:/root/'
