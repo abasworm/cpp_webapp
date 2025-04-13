@@ -2,7 +2,7 @@
 #define USER_MODEL_HPP
 
 #include <string>
-#include "json.hpp" // nlohmann json
+#include "../../json.hpp" // nlohmann json
 
 // Use the nlohmann namespace
 using json = nlohmann::json;
